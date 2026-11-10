@@ -114,19 +114,21 @@ function renderViews(scroll = false) {
   activeChat.chats.forEach((c) => {
     if (c.isLoader === "yes") {
       html += `<div class="single-chat">
-        <div class="user"><img src="${commonIcon.avatarIcon}" alt="avater icon"><p>${escapeHtml(c.user)}</p></div>
+        <div class="user"><p>${escapeHtml(c.user)}</p></div>
         <div class="gemini"><img src="${commonIcon.geminiLaoder}" alt="avater icon"></div>
       </div>`;
       return;
     }
     html += `<div class="single-chat">
-      <div class="user"><img src="${commonIcon.avatarIcon}" alt="avater icon"><p>${escapeHtml(c.user)}</p></div>
-      <div class="gemini"><img src="${commonIcon.chatGeminiIcon}" alt="avater icon"><p class="gemini-p" id="g_${c.id}">${loadText(c.gemini)}</p></div>
+      <div class="user"><p>${escapeHtml(c.user)}</p></div>
+      <div class="gemini"><img src="${commonIcon.chatGeminiIcon}" alt="avater icon"><div class="gemini-p" id="g_${c.id}">${loadText(c.gemini)}</div></div>
       <div class="copy-icon copy-icon-one" data-copy="${c.id}"><img src="${icon.copyIcon}" alt="copy icon"></div>
     </div>`;
   });
   scrollView.innerHTML = html;
   refreshIcons(scrollView);
+  hljsBlock(scrollView);
+  refreshCopy();
   scrollView.scrollTop = scrollView.scrollHeight;
   if (scroll) scrollView.scrollTop = scrollView.scrollHeight;
 }
@@ -152,42 +154,19 @@ function typewrite(id, htmlText) {
     }
     refreshCopy();
   };
-  const el = $("g_" + id);
-  if (!el) return finish();
-  const realtime = localStorage.getItem("realtime") || "no";
-  if (realtime === "yes") return finish();
-  let i = 0;
-  const timer = setInterval(() => {
-    if (i >= htmlText.length) {
-      clearInterval(timer);
-      finish();
-      return;
-    }
-    i += 7;
-    el.innerHTML = htmlText.slice(0, i);
-  }, 5);
+  finish();
 }
 
 function hljsBlock(el) {
   el.querySelectorAll("pre code").forEach((b) => {
     b.classList.add("hljs");
-    hljs.highlightElement(b);
+    if (window.hljs) hljs.highlightElement(b);
   });
 }
 
-// ---------- text rendering (exact template loadText) ----------
-function escapeHtmlOnce(s) {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-}
-
+// Parse Markdown before sanitizing model-provided HTML.
 function loadText(text) {
-  return text
-    ?.replace(/\n/g, "<br>")
-    ?.replace(/\*\*(.*?)\*\*/g, '<span class="h1-bold">$1</span>')
-    ?.replace(/(\?|!)?`(?:```|&#96;&#96;&#96;)(python|py|javascript|js|bash|sh|sql|html|css|cpp|c|java|text)?([\s\S]*?)```/g, (_, __, lang, code) => {
-      return `<br><pre><code class="language-${lang || "text"}">${code}</code></pre>`;
-    })
-    ?.replace(/(^|<br>)\*/g, "$1<span class='list'>&#9898;</span>");
+  return DOMPurify.sanitize(marked.parse(String(text ?? ""), { gfm: true, breaks: true }));
 }
 
 // ---------- prompts ----------
@@ -268,6 +247,7 @@ function toggleAdvanceGeminiHandler() {
 
 function renderAdvance() {
   const icon = themeIcon();
+  $("modelSelect").value = settingsModel.model;
   const el = $("advanceMain");
   el.className = `advance-main ${advanceShow ? "advance-on" : "advance-off"}`;
   el.innerHTML = `
@@ -443,6 +423,11 @@ function init() {
   $("themeToggle").onclick = toggleTheme;
   $("realtimeToggle").onclick = toggleRealtime;
   // input
+  $("modelSelect").addEventListener("change", (e) => {
+    settingsModel.model = e.target.value;
+    localStorage.setItem("gemini_model", settingsModel.model);
+    renderAdvance();
+  });
   $("chatForm").addEventListener("submit", (e) => {
     e.preventDefault();
     handleSend();

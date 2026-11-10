@@ -145,16 +145,41 @@ function refreshIcons(scope) {
 }
 
 // ---------- typewriter (ReplyByGemini) ----------
-function typewrite(id, htmlText) {
-  const finish = () => {
-    const el = $("g_" + id);
-    if (el) {
-      el.innerHTML = htmlText;
+function typewrite(id, markdown) {
+  const el = $("g_" + id);
+  if (!el) return;
+  const scrollView = $("scrollChatView");
+  const characters = Array.from(markdown);
+  let offset = 0;
+  let lastFrame = 0;
+
+  const render = (complete) => {
+    const followBottom = scrollView.scrollHeight - scrollView.scrollTop - scrollView.clientHeight < 80;
+    el.innerHTML = loadText(complete ? markdown : characters.slice(0, offset).join(""));
+    if (complete) {
       hljsBlock(el);
+      refreshCopy();
     }
-    refreshCopy();
+    if (followBottom) scrollView.scrollTop = scrollView.scrollHeight;
   };
-  finish();
+
+  if ((localStorage.getItem("realtime") || "no") === "yes") {
+    render(true);
+    return;
+  }
+
+  // Reveal source text, never partial HTML tags. Stop if this view is replaced.
+  el.replaceChildren();
+  const step = (timestamp) => {
+    if ($("g_" + id) !== el) return;
+    if (timestamp - lastFrame >= 25) {
+      offset = Math.min(offset + 8, characters.length);
+      render(offset === characters.length);
+      lastFrame = timestamp;
+    }
+    if (offset < characters.length) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
 }
 
 function hljsBlock(el) {
@@ -341,7 +366,7 @@ async function handleSend() {
     if (first || !chatById(activeChat.id)) saveRecent(userText);
     localStorage.setItem("chat_" + activeChat.id, JSON.stringify(activeChat));
     renderViews();
-    typewrite(msgId, loadText(reply));
+    typewrite(msgId, reply);
   } catch (err) {
     isLoader = false;
     $("loaderBar").style.display = "none";

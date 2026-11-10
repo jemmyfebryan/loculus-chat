@@ -3,6 +3,7 @@ const SP = "suggest_prompt_v1";
 let recentChats = JSON.parse(localStorage.getItem("recent_chats_v1")) || [];
 let activeChat = null; // {id, title, model, chats: [{id,user,gemini,isLoader,newChat}]}
 let isLoader = false;
+let streamController = null;
 let isSidebarLong = window.innerWidth > 960 && JSON.parse(localStorage.getItem("sidebar_long_v1") ?? "true");
 let isShowMore = false;
 let settingsShow = false;
@@ -71,6 +72,7 @@ function saveRecent(title) {
 }
 
 function openRecent(id) {
+  streamController?.abort();
   const stored = JSON.parse(localStorage.getItem("chat_" + id) || "null");
   if (!stored) return;
   activeChat = stored;
@@ -88,6 +90,7 @@ function deleteRecent(id) {
 
 // ---------- new chat ----------
 function newChatHandler() {
+  streamController?.abort();
   activeChat = null;
   renderSidebar();
   renderViews();
@@ -121,7 +124,7 @@ function renderViews(scroll = false) {
     }
     html += `<div class="single-chat">
       <div class="user"><p>${escapeHtml(c.user)}</p></div>
-      <div class="gemini"><img src="${commonIcon.chatGeminiIcon}" alt="avater icon"><div class="gemini-p" id="g_${c.id}">${loadText(c.gemini)}</div></div>
+      <div class="gemini"><img src="${commonIcon.chatGeminiIcon}" alt="avater icon"><div class="gemini-p" id="g_${c.id}">${loadText(c.gemini)}${c.error ? `<p class="response-error" role="status">${escapeHtml(c.error)}</p>` : ""}</div></div>
       <div class="copy-icon copy-icon-one" data-copy="${c.id}"><img src="${icon.copyIcon}" alt="copy icon"></div>
     </div>`;
   });
@@ -142,44 +145,6 @@ function refreshIcons(scope) {
   scope.querySelectorAll("[data-common]").forEach((el) => {
     el.src = commonIcon[el.dataset.common];
   });
-}
-
-// ---------- typewriter (ReplyByGemini) ----------
-function typewrite(id, markdown) {
-  const el = $("g_" + id);
-  if (!el) return;
-  const scrollView = $("scrollChatView");
-  const characters = Array.from(markdown);
-  let offset = 0;
-  let lastFrame = 0;
-
-  const render = (complete) => {
-    const followBottom = scrollView.scrollHeight - scrollView.scrollTop - scrollView.clientHeight < 80;
-    el.innerHTML = loadText(complete ? markdown : characters.slice(0, offset).join(""));
-    if (complete) {
-      hljsBlock(el);
-      refreshCopy();
-    }
-    if (followBottom) scrollView.scrollTop = scrollView.scrollHeight;
-  };
-
-  if ((localStorage.getItem("realtime") || "no") === "yes") {
-    render(true);
-    return;
-  }
-
-  // Reveal source text, never partial HTML tags. Stop if this view is replaced.
-  el.replaceChildren();
-  const step = (timestamp) => {
-    if ($("g_" + id) !== el) return;
-    if (timestamp - lastFrame >= 25) {
-      offset = Math.min(offset + 8, characters.length);
-      render(offset === characters.length);
-      lastFrame = timestamp;
-    }
-    if (offset < characters.length) requestAnimationFrame(step);
-  };
-  requestAnimationFrame(step);
 }
 
 function hljsBlock(el) {
@@ -235,7 +200,6 @@ function renderSettings() {
 function renderToggles() {
   const theme = localStorage.getItem("theme") || "dark";
   setToggle($("themeToggle"), theme === "dark");
-  setToggle($("realtimeToggle"), (localStorage.getItem("realtime") || "no") === "yes");
 }
 
 function setToggle(btn, on) {
@@ -248,12 +212,6 @@ function toggleTheme() {
   localStorage.setItem("theme", cur === "dark" ? "light" : "dark");
   applyTheme();
   renderAll();
-}
-
-function toggleRealtime() {
-  const cur = localStorage.getItem("realtime") || "no";
-  localStorage.setItem("realtime", cur === "yes" ? "no" : "yes");
-  renderToggles();
 }
 
 function settingsHandler() {
@@ -329,48 +287,97 @@ async function handleSend() {
   if (!activeChat) {
     activeChat = { id: Date.now().toString(), title: userText.slice(0, 20), chats: [] };
   }
-  const msgId = Date.now().toString();
+  const chat = activeChat;
+  const history = chat.chats
+    .filter((c) => c.isLoader === "no" && c.gemini && !c.error)
+    .flatMap((c) => [{ role: "user", parts: [{ text: c.user }] }, { role: "model", parts: [{ text: c.gemini }] }]);
+  const entry = { id: Date.now().toString(), user: userText, gemini: "", isLoader: "yes" };
+  chat.chats.push(entry);
+  const controller = new AbortController();
+  streamController = controller;
   isLoader = true;
-
-  // loader entry (exact template: user + gemini loader gif)
-  const loaderEntry = { id: msgId, user: userText, gemini: "", isLoader: "yes" };
-  const renderable = [...activeChat.chats, loaderEntry];
-  const temp = { ...activeChat, chats: renderable };
-  const saved = activeChat;
-  activeChat = temp;
-  renderViews();
-  activeChat = saved;
-
   input.value = "";
-  $("loaderBar").style.display = "";
+  renderViews();
+  renderHeader();
 
-  const history = activeChat.chats
-    .filter((c) => c.isLoader === "no" && c.gemini)
-    .map((c) => ({ role: "user", parts: [{ text: c.user }] }, { role: "model", parts: [{ text: c.gemini }] }));
+  const persist = () => {
+    localStorage.setItem("chat_" + chat.id, JSON.stringify(chat));
+    if (!chatById(chat.id)) {
+      recentChats.push({ id: chat.id, title: chat.title });
+      localStorage.setItem("recent_chats_v1", JSON.stringify(recentChats));
+    }
+    renderSidebar();
+  };
+  const update = () => {
+    if (activeChat !== chat) return;
+    const view = $("scrollChatView");
+    const followBottom = view.scrollHeight - view.scrollTop - view.clientHeight < 80;
+    const el = $("g_" + entry.id);
+    if (!el) renderViews();
+    else el.innerHTML = loadText(entry.gemini);
+    if (followBottom) view.scrollTop = view.scrollHeight;
+  };
 
   try {
     const res = await fetch("/api/chat", {
       method: "POST",
+      signal: controller.signal,
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         model: settingsModel.model,
+        stream: true,
         messages: [...history, { role: "user", parts: [{ text: userText }] }],
       }),
     });
-    if (!res.ok) throw new Error("gemini request failed");
-    const data = await res.json();
-    isLoader = false;
-    const reply = data.reply || "";
-    activeChat = { ...activeChat, chats: [...activeChat.chats, { id: msgId, user: userText, gemini: reply, isLoader: "no" }] };
-    const first = activeChat.chats.length === 1;
-    if (first || !chatById(activeChat.id)) saveRecent(userText);
-    localStorage.setItem("chat_" + activeChat.id, JSON.stringify(activeChat));
-    renderViews();
-    typewrite(msgId, reply);
+    if (!res.ok || !res.body) throw new Error("Unable to get a response. Please try again.");
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let complete = false;
+    const consume = (line) => {
+      if (!line.trim()) return;
+      const event = JSON.parse(line);
+      if (event.type === "error") throw new Error(event.message);
+      if (event.type === "done") complete = true;
+      if (event.type === "delta") {
+        entry.gemini += event.text;
+        entry.isLoader = "no";
+        update();
+      }
+    };
+    try {
+      while (true) {
+        const { value, done } = await reader.read();
+        buffer += decoder.decode(value, { stream: !done });
+        const lines = buffer.split("\n");
+        buffer = lines.pop();
+        lines.forEach(consume);
+        if (done) break;
+      }
+      consume(buffer);
+      if (!complete) throw new Error("Response interrupted. Please try again.");
+      if (!entry.gemini) throw new Error("No response generated. Please try again.");
+    } finally {
+      await reader.cancel();
+      reader.releaseLock();
+    }
   } catch (err) {
-    isLoader = false;
-    $("loaderBar").style.display = "none";
-    renderViews();
+    entry.error = err.name === "AbortError" ? "Response stopped." : err.message;
+  } finally {
+    entry.isLoader = "no";
+    persist();
+    if (streamController === controller) {
+      streamController = null;
+      isLoader = false;
+      $("loaderBar").style.display = "none";
+    }
+    if (activeChat === chat) {
+      update();
+      const el = $("g_" + entry.id);
+      if (el) hljsBlock(el);
+      if (entry.error) renderViews();
+      refreshCopy();
+    }
   }
 }
 
@@ -446,7 +453,6 @@ function init() {
   $("geminiName").onclick = toggleAdvanceGeminiHandler;
   // settings
   $("themeToggle").onclick = toggleTheme;
-  $("realtimeToggle").onclick = toggleRealtime;
   // input
   $("modelSelect").addEventListener("change", (e) => {
     settingsModel.model = e.target.value;

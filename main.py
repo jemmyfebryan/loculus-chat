@@ -1,7 +1,8 @@
 import os
+import json
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from google import genai
@@ -26,6 +27,7 @@ class Message(BaseModel):
 
 class ChatRequest(BaseModel):
     model: str
+    stream: bool = False
     messages: List[Message]
 
 @app.get("/", response_class=HTMLResponse)
@@ -41,10 +43,10 @@ async def chat_endpoint(payload: ChatRequest):
     allowed_models = ["gemini-3.5-flash-lite", "gemini-3.6-flash", "gemini-3.8-flash"]
     model_name = payload.model if payload.model in allowed_models else "gemini-3.8-flash"
     
+    if not payload.messages:
+        raise HTTPException(status_code=400, detail="No messages provided.")
+
     try:
-        if not payload.messages:
-            raise HTTPException(status_code=400, detail="No messages provided.")
-        
         formatted_history = []
         for msg in payload.messages[:-1]:
             role = "user" if msg.role == "user" else "model"
@@ -57,7 +59,7 @@ async def chat_endpoint(payload: ChatRequest):
         if formatted_history and formatted_history[0].role != "user":
             formatted_history.pop(0)
             
-        chat = client.chats.create(
+        chat = (client.aio.chats if payload.stream else client.chats).create(
             model=model_name,
             history=formatted_history if formatted_history else None
         )
@@ -67,6 +69,26 @@ async def chat_endpoint(payload: ChatRequest):
         for p in latest_msg.parts:
             latest_text += p.get("text", str(p)) if isinstance(p, dict) else str(p)
             
+        if payload.stream:
+            async def events():
+                def encode(event):
+                    return json.dumps(event, ensure_ascii=False) + "\n"
+
+                try:
+                    stream = await chat.send_message_stream(latest_text)
+                    async for chunk in stream:
+                        if chunk.text:
+                            yield encode({"type": "delta", "text": chunk.text})
+                    yield encode({"type": "done", "model": model_name})
+                except Exception:
+                    yield encode({"type": "error", "message": "Response interrupted. Please try again."})
+
+            return StreamingResponse(
+                events(),
+                media_type="application/x-ndjson",
+                headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+            )
+
         response = chat.send_message(latest_text)
         reply_text = response.text if response and hasattr(response, "text") else "No response generated."
         return {"reply": reply_text, "model": model_name}

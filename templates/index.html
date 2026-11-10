@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gemini</title>
+    <link rel="stylesheet" href="/static/css/gemini.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
+</head>
+<body>
+    <div class="App">
+        <!-- Sidebar (components/Sidebar/Sidebar.js) -->
+        <div class="sidebar-main side-bar-long" id="sidebar">
+            <div class="menu-icon" id="menuIconBtn">
+                <img class="node-icon" data-icon="menuIcon" alt="menu icon">
+            </div>
+
+            <div class="recent-chat-section">
+                <div class="pluc-icon new-plus-icon" id="newChatButton">
+                    <img class="node-icon" data-icon="plusIcon" alt="plus icon">
+                    <p data-p>New chat</p>
+                </div>
+                <div class="recent-chat-main" data-p>
+                    <p>Recent</p>
+                    <div id="recentChatList"></div>
+                </div>
+            </div>
+
+            <div class="settings-section" id="settingsSection">
+                <div class="help">
+                    <img class="node-icon" data-icon="helpIcon" alt="help icon">
+                    <p data-p>Help</p>
+                </div>
+                <div class="activity">
+                    <img class="node-icon" data-icon="activityIcon" alt="activity icon">
+                    <p data-p>Activity</p>
+                </div>
+                <div class="settings" onclick="settingsHandler()">
+                    <img class="node-icon" data-icon="settingsIcon" alt="settings icon">
+                    <p data-p>Settings</p>
+                </div>
+                <div class="upgrade-gimini" data-p>
+                    <img src="/static/asset/gemini_sparkle_red_4ed1cbfcbc6c9e84c31b987da73fc4168aec8445.svg" alt="gemini-logo">
+                    <p>Upgrade to Gemini Advanced</p>
+                </div>
+                <div class="location" data-p>
+                    <div class="dot">
+                        <img class="node-icon" data-icon="dotIcon" alt="dot icon">
+                    </div>
+                    <p><span class="location-name">Unknown</span> From your IP address <span class="span-dot">.</span><span> Update location</span></p>
+                </div>
+            </div>
+        </div>
+
+        <!-- ChatSection (components/ChatSection/ChatSection.js) -->
+        <div class="chat-section-main">
+            <!-- Header (components/Header/Header.js) -->
+            <div class="header-main">
+                <div class="left-section">
+                    <div class="menu-icon" id="headerMenuBtn">
+                        <img id="headerMenuIconImg" class="node-icon" data-icon="menuIcon" alt="menu icon">
+                    </div>
+                    <div class="name" id="geminiName">
+                        <p>Gemini</p>
+                        <img class="node-icon" data-icon="dropIconSmall" alt="drop down button">
+                    </div>
+                </div>
+                <div class="right-section" id="headerRight"></div>
+            </div>
+
+            <!-- AdvanceGemini (components/Ui/AdvanceGmini.js) -->
+            <div class="advance-main advance-off" id="advanceMain"></div>
+
+            <!-- Loader (components/Ui/Loader.js) -->
+            <div class="loader-container" id="loaderBar" style="display:none">
+                <div class="loader-bar"></div>
+            </div>
+
+            <!-- NewChat (components/NewChat/NewChat.js) -->
+            <div class="newchat-main" id="newChatView">
+                <div class="text-section">
+                    <h1>Hello, Guest.</h1>
+                    <h2>How can I help you today?</h2>
+                </div>
+                <div class="prompt-main" id="promptMain"></div>
+            </div>
+
+            <!-- ScrollChat (components/NewChat/ScrollChat/ScrollChat.js) -->
+            <div class="scroll-chat-main" id="scrollChatView" style="display:none"></div>
+
+            <!-- InputSection (components/InputSection/InputSection.js) -->
+            <div class="input-main">
+                <form id="chatForm" autocomplete="off">
+                    <input type="text" placeholder="Enter a prompt here" name="prompt" id="promptInput" autocomplete="off">
+                    <button type="submit">
+                        <img class="node-icon" data-icon="sendIcon" alt="send icon">
+                    </button>
+                </form>
+            </div>
+
+            <div class="warning-text">
+                <p>
+                    Gemini may display inaccurate info, including about people, so double-check its responses.
+                    <span><a href="https://support.google.com/gemini?p=privacy_notice">Your privacy &amp; Gemini Apps</a></span>
+                </p>
+            </div>
+        </div>
+
+        <!-- SettingSection (components/SettingSection/SettingSecion.js) -->
+        <div class="setting-main settings-hide" id="settingMain">
+            <div class="title"><h4>Settings</h4></div>
+            <div class="public-link">
+                <img class="node-icon" data-icon="linkIcon" alt="link icon">
+                <p>Your public links</p>
+            </div>
+            <div class="theme">
+                <img class="node-icon" data-icon="moonIcon" alt="moon icon">
+                <p>Dark theme</p>
+                <div class="btn-main" id="themeToggle"></div>
+            </div>
+            <div class="real-time">
+                <img class="node-icon" data-icon="wallIcon" alt="wall icon">
+                <p>Real-time responses</p>
+                <div class="btn-main" id="realtimeToggle"></div>
+            </div>
+        </div>
+
+        <!-- UserIntroPrompt (components/UserIntroPrompt/UserIntroPrompt.js) -->
+        <div class="intro-main" id="introMain" style="display:none"></div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script src="/static/js/icons.js"></script>
+    <script src="/static/js/gemini.js"></script>
+    <script>init();</script>
+</body>
+</html>

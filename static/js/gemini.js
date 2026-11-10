@@ -3,7 +3,7 @@ const SP = "suggest_prompt_v1";
 let recentChats = JSON.parse(localStorage.getItem("recent_chats_v1")) || [];
 let activeChat = null; // {id, title, model, chats: [{id,user,gemini,isLoader,newChat}]}
 let isLoader = false;
-let isSidebarLong = JSON.parse(localStorage.getItem("sidebar_long_v1") ?? "true");
+let isSidebarLong = window.innerWidth > 960 && JSON.parse(localStorage.getItem("sidebar_long_v1") ?? "true");
 let isShowMore = false;
 let settingsShow = false;
 let advanceShow = false;
@@ -413,6 +413,7 @@ function renderAll() {
   renderViews();
   renderSettings();
   renderAdvance();
+  refreshIcons(document);
 }
 
 // ---------- init ----------
@@ -466,8 +467,10 @@ function init() {
       (settingsShow && !e.target.closest("#settingMain") && !e.target.closest(".settings")) ||
       (advanceShow && !e.target.closest("#advanceMain") && !e.target.closest("#geminiName"))
     ) {
-      settingsHandler();
-      toggleAdvanceGeminiHandler();
+      settingsShow = false;
+      advanceShow = false;
+      renderSettings();
+      renderAdvance();
     }
   });
 }
